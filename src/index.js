@@ -1,3 +1,10 @@
+import performance, {
+  PerformanceObserver,
+  setResourceLoggingEnabled,
+} from "react-native-performance";
+
+export const allMeasuresRecorded = false;
+
 // Utility to check if a given value is a typed array
 function isTypedArray(value) {
   return ArrayBuffer.isView(value) && !(value instanceof DataView);
@@ -32,58 +39,65 @@ function isNativeObject(value) {
 }
 
 // Wraps a function to profile its execution time
-function profileFunction(originalFunction, currentPath) {
+export function profileFunction(originalFunction, currentPath) {
+  const startMark = `start-${currentPath}`;
+  const endMark = `end-${currentPath}`;
+  const measureName = `measure-${currentPath}`;
+
+  performance.mark(startMark);
+
   // Return a new function that wraps the original
   return function (...args) {
-    const start = performance.now(); // Start the performance timer
+    // const start = performance.now(); // Start the performance timer
+    // Invoke the original function with the current context and arguments
+    const result = originalFunction.apply(this, args);
     try {
-      // Invoke the original function with the current context and arguments
-      const result = originalFunction.apply(this, args);
-      let end = performance.now(); // End the performance timer
+      // const end = performance.now(); // End the performance timer
 
       // If the original function returns a promise, handle it
       if (result instanceof Promise) {
         return result
           .then((res) => {
-            end = performance.now(); // End the performance timer
+            performance.mark(endMark); // Mark the end of the async operation
+            performance.measure(measureName, startMark, endMark); // Measure the duration of the async operation
             // Log the time taken for async function upon resolution
-            console.log(
-              `Async function ${currentPath} took ${(end - start).toFixed(
-                2
-              )} ms.`
-            );
+            // const measure = performance.getEntriesByName(measureName).pop();
+            // console.log(`Async function ${currentPath} took ${measure.duration.toFixed(2)} ms.`);
             return res;
           })
           .catch((err) => {
-            end = performance.now(); // End the performance timer
+            performance.mark(endMark); // Mark the end of the async operation
+            performance.measure(measureName, startMark, endMark); // Measure the duration of the async operation
             // Log any errors and the time taken for async function upon rejection
-            console.error(
-              `Async function ${currentPath} failed after ${(
-                end - start
-              ).toFixed(2)} ms with error: ${err}`
-            );
+            // const measure = performance.getEntriesByName(measureName).pop();
+            // console.error(
+            //   `Async function ${currentPath} failed after ${measure.duration.toFixed(
+            //     2,
+            //   )} ms with error: ${err}`,
+            // );
             throw err;
           });
       }
 
       // Log the time taken for synchronous function execution
-      console.log(
-        `Function ${currentPath} took ${(end - start).toFixed(2)} ms.`
-      );
+      // console.log(`Function ${currentPath} took ${(end - start).toFixed(2)} ms.`);
       // If result is an object and not a native one, return its profiling proxy
       if (isObject(result) && !isNativeObject(result)) {
         return createProfilingProxy(result, currentPath);
       }
       return result; // Otherwise, return the result directly
     } catch (error) {
-      const end = performance.now(); // End the performance timer
+      // const end = performance.now(); // End the performance timer
       // Log the error and time taken if the function throws
-      console.error(
-        `Function ${currentPath} failed after ${(end - start).toFixed(
-          2
-        )} ms with error: ${error}`
-      );
+      // console.error(
+      //   `Function ${currentPath} failed after ${(end - start).toFixed(2)} ms with error: ${error}`,
+      // );
       throw error; // Rethrow the error for external handling
+    } finally {
+      if (!(result instanceof Promise)) {
+        performance.mark(endMark); // Mark the end of the async operation
+        performance.measure(measureName, startMark, endMark); // Measure the duration of the async operation
+      }
     }
   };
 }
@@ -92,7 +106,7 @@ function profileFunction(originalFunction, currentPath) {
 export function createProfilingProxy(
   target,
   path = "library",
-  evalProfileFunctions = true
+  evalProfileFunctions = false
 ) {
   if (isNativeObject(target) || isTypedArray(target)) {
     return target; // Prevent proxying if the target is a native object or a TypedArray
@@ -113,13 +127,11 @@ export function createProfilingProxy(
               // Only wrap the `next` method if not already profiled
               if (!iterator.__isProfiled) {
                 iterator.next = function () {
-                  const start = performance.now(); // Start timing the iteration
+                  // const start = performance.now(); // Start timing the iteration
                   const result = originalNext.apply(this, arguments);
-                  const end = performance.now(); // End timing the iteration
+                  // const end = performance.now(); // End timing the iteration
                   // Log the time taken for `next` method call
-                  console.log(
-                    `Iterator next took ${(end - start).toFixed(2)} ms.`
-                  );
+                  // console.log(`Iterator next took ${(end - start).toFixed(2)} ms.`);
                   return result; // Return the iterator result
                 };
                 // Mark the iterator as profiled to prevent double-wrapping
@@ -166,7 +178,7 @@ export function createProfilingProxy(
 
   // If the target is a function, return a profiled function
   if (isFunction(target)) {
-    console.log(`Profiling function at ${path}`);
+    // console.log(`Profiling function at ${path}`);
     if (evalProfileFunctions) {
       // Use a dynamic function to avoid using eval directly
       const dynamicProfileFunction = new Function(
@@ -187,4 +199,14 @@ export function createProfilingProxy(
 
   // Otherwise, return a proxy to profile method calls on objects
   return new Proxy(target, handler);
+}
+const measureObserver = new PerformanceObserver((list, observer) => {
+  // list.getEntries().forEach((entry) => {
+  //   console.log(`${entry.name} took ${entry.duration}ms`);
+  // });
+});
+measureObserver.observe({ type: "measure", buffered: true });
+
+export function getMeasurements() {
+  return performance.getEntriesByType("measure");
 }

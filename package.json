@@ -1,5 +1,5 @@
 {
-  "name": "@pax-k/chrono-scope",
+  "name": "@pax-k/chrono-scope-js",
   "version": "1.0.3",
   "description": "Unveil the performance mysteries of your JavaScript code! This sleek profiler 🚀 hooks into your functions seamlessly, timing 🕒 their execution and providing insight into async operations. Navigate your codebase with newfound clarity, optimizing 🛠️ as you go!",
   "type": "module",

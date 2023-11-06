@@ -39,12 +39,13 @@ function profileFunction(originalFunction, currentPath) {
     try {
       // Invoke the original function with the current context and arguments
       const result = originalFunction.apply(this, args);
-      const end = performance.now(); // End the performance timer
+      let end = performance.now(); // End the performance timer
 
       // If the original function returns a promise, handle it
       if (result instanceof Promise) {
         return result
           .then((res) => {
+            end = performance.now(); // End the performance timer
             // Log the time taken for async function upon resolution
             console.log(
               `Async function ${currentPath} took ${(end - start).toFixed(
@@ -54,6 +55,7 @@ function profileFunction(originalFunction, currentPath) {
             return res;
           })
           .catch((err) => {
+            end = performance.now(); // End the performance timer
             // Log any errors and the time taken for async function upon rejection
             console.error(
               `Async function ${currentPath} failed after ${(
@@ -87,7 +89,14 @@ function profileFunction(originalFunction, currentPath) {
 }
 
 // Creates a proxy to profile function or object method calls
-export function createProfilingProxy(target, path = "library") {
+export function createProfilingProxy(
+  target,
+  path = "library",
+  evalProfileFunctions = true
+) {
+  if (isNativeObject(target) || isTypedArray(target)) {
+    return target; // Prevent proxying if the target is a native object or a TypedArray
+  }
   // Define the handler for the proxy
   const handler = {
     // Trap to intercept property access
@@ -148,13 +157,32 @@ export function createProfilingProxy(target, path = "library") {
       }
       return value; // Otherwise, return the property value directly
     },
+    apply(target, thisArg, argumentsList) {
+      // Wrap the target function with profiling if it is directly invoked
+      return profileFunction(target, path).apply(thisArg, argumentsList);
+    },
     // other traps would go here...
   };
 
   // If the target is a function, return a profiled function
   if (isFunction(target)) {
     console.log(`Profiling function at ${path}`);
-    return profileFunction(target, path);
+    if (evalProfileFunctions) {
+      // Use a dynamic function to avoid using eval directly
+      const dynamicProfileFunction = new Function(
+        "fn",
+        "profileFunction",
+        "currentPath",
+        `
+        return function(...args) {
+          return profileFunction(fn, currentPath).apply(this, args);
+        };
+      `
+      );
+      return dynamicProfileFunction(target, profileFunction, path);
+    } else {
+      return profileFunction(target, path);
+    }
   }
 
   // Otherwise, return a proxy to profile method calls on objects

@@ -3,7 +3,7 @@ import performance, {
   setResourceLoggingEnabled,
 } from "react-native-performance";
 
-export const allMeasuresRecorded = false;
+const proxiedFunctions = new WeakMap();
 
 // Utility to check if a given value is a typed array
 function isTypedArray(value) {
@@ -40,6 +40,10 @@ function isNativeObject(value) {
 
 // Wraps a function to profile its execution time
 export function profileFunction(originalFunction, currentPath) {
+  // Check if the function was already proxied
+  if (proxiedFunctions.has(originalFunction)) {
+    return proxiedFunctions.get(originalFunction);
+  }
   const startMark = `start-${currentPath}`;
   const endMark = `end-${currentPath}`;
   const measureName = `measure-${currentPath}`;
@@ -47,7 +51,7 @@ export function profileFunction(originalFunction, currentPath) {
   performance.mark(startMark);
 
   // Return a new function that wraps the original
-  return function (...args) {
+  const wrappedFunction = function (...args) {
     // const start = performance.now(); // Start the performance timer
     // Invoke the original function with the current context and arguments
     const result = originalFunction.apply(this, args);
@@ -63,6 +67,7 @@ export function profileFunction(originalFunction, currentPath) {
             // Log the time taken for async function upon resolution
             // const measure = performance.getEntriesByName(measureName).pop();
             // console.log(`Async function ${currentPath} took ${measure.duration.toFixed(2)} ms.`);
+            proxiedFunctions.delete(originalFunction);
             return res;
           })
           .catch((err) => {
@@ -75,6 +80,7 @@ export function profileFunction(originalFunction, currentPath) {
             //     2,
             //   )} ms with error: ${err}`,
             // );
+            proxiedFunctions.delete(originalFunction);
             throw err;
           });
       }
@@ -97,9 +103,14 @@ export function profileFunction(originalFunction, currentPath) {
       if (!(result instanceof Promise)) {
         performance.mark(endMark); // Mark the end of the async operation
         performance.measure(measureName, startMark, endMark); // Measure the duration of the async operation
+        proxiedFunctions.delete(originalFunction);
       }
     }
   };
+
+  proxiedFunctions.set(originalFunction, wrappedFunction);
+
+  return wrappedFunction;
 }
 
 // Creates a proxy to profile function or object method calls

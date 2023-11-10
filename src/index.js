@@ -189,33 +189,13 @@ export function createProfilingProxy(
 
   // If the target is a function, return a profiled function
   if (isFunction(target)) {
-    // console.log(`Profiling function at ${path}`);
-    if (evalProfileFunctions) {
-      // Use a dynamic function to avoid using eval directly
-      const dynamicProfileFunction = new Function(
-        "fn",
-        "profileFunction",
-        "currentPath",
-        `
-        return function(...args) {
-          return profileFunction(fn, currentPath).apply(this, args);
-        };
-      `
-      );
-      return dynamicProfileFunction(target, profileFunction, path);
-    } else {
-      return profileFunction(target, path);
-    }
+    return profileFunction(target, path);
   }
 
   // Otherwise, return a proxy to profile method calls on objects
   return new Proxy(target, handler);
 }
-const measureObserver = new PerformanceObserver((list, observer) => {
-  // list.getEntries().forEach((entry) => {
-  //   console.log(`${entry.name} took ${entry.duration}ms`);
-  // });
-});
+const measureObserver = new PerformanceObserver((list, observer) => {});
 measureObserver.observe({ type: "measure", buffered: true });
 
 export function getMeasurements() {
